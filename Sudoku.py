@@ -1,203 +1,192 @@
-# Class code for the sudoku game logic.
-import json
+# Author: Kit Vander Wilt
+
+"""
+Game Logic for playing Sudoku.
+
+Classes:
+    Sudoku
+    Number
+
+Functions:
+
+Misc variables:
+
+"""
+
+
+class Number:
+    """
+    Structure to hold all relevant data associated to a number/square in a Sudoku game
+
+    Attributes:
+        value: An integer between 1 and 9
+        editable: A boolean representing if the value can be changed. Should only be set during initialization.
+        valid: A boolean to keep track of whether or not the value is considered correct in the puzzle.
+    """
+
+    def __init__(self, value: int, editable: bool, valid: bool):
+        self.value = value
+        self.editable = editable
+        self.valid = valid
+
+    def get_value(self):
+        return self.value
+
+    def set_value(self, value: int):
+        self.value = value
+
+    def get_editable(self):
+        return self.editable
+
+    def get_valid(self):
+        return self.valid
+
+    def set_valid(self, valid: bool):
+        self.valid = valid
+
 
 class Sudoku:
-    def __init__(self):
-        self.gameList = [0] * 81
-        self.editable = [not x for x in self.gameList]
+    """
+    A Module implementing the game of Sudoku.
 
-    def importList(self, puzzleFile):
-        with open(puzzleFile, 'r') as f:
-            self.puzzleJSON = json.load(f)
-        self.gameList = self.puzzleJSON['puzzleValues']
-        self.editable = self.puzzleJSON['editableValues']
+    To create a game, pass in a string or list of numbers where 0's represent blank squares.
 
-    def exportList(self, saveFile):
-        # Need to figure out the structure of the JSON for both read/write.
-        # Currently only supports read only
-        puzzleDict = {}
-        puzzleDict['puzzleValues'] = self.gameList
-        puzzleDict['editablevalues'] = self.editable
-        with open(saveFile, 'w') as f:
-            json.dump(puzzleDict, f)
+    Attributes:
+        numbers: A list of Numbers (see above). Will always be 81 elements long, indices 0-8 are the "top row",
+            indices 9-17 are the "second row", and so on until indices 72-80 represent the "bottom row".
+            suppose that r in range(9) and c in range(9) then r*9+c is the index in numbers for the (r, c) square.
 
+    Functions:
+        get_number()
+        set_number()
+        get_puzzle()
+        check_puzzle()
+        solve_puzzle()
+        clear_progress()
+    """
 
-    # If reference is given, assuming valid number(s) given.
-    def setNumber(self, value, num1=None, num2=None):
-        # If both num1 and num2 are used when this is called,
-        #       assume they refer to row and column respectively.
-        # If only one number is passed then assume it is an index (from 0 to 80)
-        # If no numbers are passed then abort the change. (print error message)
-        if (num1 is None and num2 is None):
-            print('Please pass in a reference to where the value ' + value + ' should go.')
-            print('Acceptable formats:')
-            print('\tsetValue(value, row, column)')
-            print('\tsetValue(value, index)')
-        if (num1 is not None and num2 is not None):
-            #row/column
-            index = self.__rowColumnToIndex(num1, num2)
-            self.__setNumberHelper(value, index)
-        else:
-            if (num2 is not None):
-                num1 = num2
-            self.__setNumberHelper(value, num1)
+    def __init__(self, input):
+        self.numbers = []
+        if len(input) == 81:
+            if isinstance(input, str):
+                nums = [int(x) for x in input]
+            elif isinstance(input, list):
+                nums = input
+            else:
+                raise TypeError(f'Unable to create sudoku game with {input}')
+            for num in nums:
+                if num == 0:
+                    self.numbers.append(Number(num, True, False))
+                else:
+                    self.numbers.append(Number(num, False, True))
 
-    def __setNumberHelper(self, value, index):
-        if (self.editable[index] == True):
-            self.gameList[index] = value
-        else:
-            print('Cannot edit this value, part of puzzle definition')
+    def get_number(self, index: int):
+        """
+        Get the value of the number at the specified index.
 
-    # output can equal 'String', 'List', or 'Matrix', default to 'List'
-    # list can equal 'Game' or 'Edit'
-    def getList(self, output=None, list=None):
-        if list is None:
-            list = 'Game'
-        if list not in ['Game', 'Edit']:
-            print("Parameter 'list': " + list + " not valid. Please choose either 'Game' or 'Edit'.")
-        if list == 'Game':
-            chosenList = self.gameList
-        else:
-            chosenList = self.editable
+        :param index: An integer between 0 and 80.
+        :return: An integer between 1 and 9.
+        """
+        return self.numbers[index].get_value()
 
-        if output is None:
-            output = 'List'
-        if output not in ['List', 'String', 'Matrix']:
-            print("Parameter 'output': " + output + " not valid. Please choose either 'String', 'List', or 'Matrix'.")
-            pass
+    def get_editable(self, index: int):
+        return self.numbers[index].get_editable()
 
-        if output == 'List':
-            return chosenList
-        if output == 'String':
-            outString = ''
-            for x in chosenList:
-                outString += str(x)
-            return outString
-        if output == 'Matrix':
-            outMatrix = []
-            for r in range(1,10):
-                line = []
-                for c in range(1,10):
-                    line.append(chosenList[self.__rowColumnToIndex(r,c)])
-                outMatrix.append(line)
-            return outMatrix
+    def get_valid(self, index: int):
+        return self.numbers[index].get_valid()
 
-    def checkSolution(self):
-        goodSolution = True
-        for i in range(81):
-            row = self.checkGroup(self.isolateRow(i))
-            column = self.checkGroup(self.isolateColumn(i))
-            square = self.checkGroup(self.isolateSquare(i))
-            #print(str(i) + '\t' + str(row) + '\t' + str(column) + '\t' + str(square) + '\t' + str(row and column and square))
-            if (row and column and square) == False:
-                goodSolution = False
-                print('The value at index ' + str(i) + ' violates the rules for a completed board')
-        return goodSolution
+    def set_number(self, index: int, value: int):
+        """
+        Set the value of the number at the specified index.
 
-    def __rowColumnToIndex (self, row, column):
-        return (row - 1) * 9 + (column - 1)
+        :param index: An integer between 0 and 80.
+        :param value: An integer between 1 and 9.
+        :return: A boolean to show whether or not the number was allowed to be set. Equals Number.editable
+        """
+        if self.numbers[index].get_editable():
+            self.numbers[index].set_value(value)
+            self.numbers[index].set_valid(self.__check_value(index))
+        return self.numbers[index].get_editable()
 
-    def checkGroup (self, groupList):
-        # Assume that groupList is a list of 9 numbers contained in the row/column/square to be checked.
-        valid = True
-        product = 1
-        check = [1,2,3,4,5,6,7,8,9]
-        for x in groupList:
-            if x not in check:
-                valid = False
-            product *= x
-        #print(product)
-        if product != 362880: # 9! = 9*8*7*6*5*4*3*2*1 = 362880
-            valid = False
-        return valid
+    def __check_value(self, index):
+        row = self.__check_value_list(index, self.__gen_row_list(index))
+        col = self.__check_value_list(index, self.__gen_column_list(index))
+        sqr = self.__check_value_list(index, self.__gen_square_list(index))
+        return row and col and sqr
 
-    def isolateRow(self, index):
-        r = (index // 9) + 1
-        row = []
-        for c in range(1,10):
-            row.append(self.gameList[self.__rowColumnToIndex(r,c)])
-        return row
+    def __check_value_list(self, index, my_list):
+        output = True
+        for x in my_list:
+            if x != index and self.numbers[index].get_value() == self.numbers[x].get_value():
+                output = False
+        return output
 
-    def isolateColumn(self, index):
-        c = (index % 9) + 1
-        column = []
-        for r in range(1,10):
-            column.append(self.gameList[self.__rowColumnToIndex(r,c)])
-        return column
+    def __gen_row_list(self, index):
+        x = index // 9
+        return list(range(9 * x, 9 * x + 9))
 
-    def isolateSquare(self, index):
-        square = []
-        topLeft = [0,1,2,9,10,11,18,19,20]
-        topCenter = [3,4,5,12,13,14,21,22,23]
-        topRight = [6,7,8,15,16,17,24,25,26]
-        midLeft = [27,28,29,36,37,38,45,46,47]
-        midCenter = [30,31,32,39,40,41,48,49,50]
-        midRight = [33,34,35,42,43,44,51,52,53]
-        botLeft = [54,55,56,63,64,65,72,73,74]
-        botCenter = [57,58,59,66,67,68,75,76,77]
-        botRight = [60,61,62,69,70,71,78,79,80]
-        '''
-        The grid-index association
-        0  1  2   3  4  5   6  7  8
-        9  10 11  12 13 14  15 16 17
-        18 19 20  21 22 23  24 25 26
+    def __gen_column_list(self, index):
+        x = index % 9
+        return [k*9+x for k in range(9)]
 
-        27 28 29  30 31 32  33 34 35
-        36 37 38  39 40 41  42 43 44
-        45 46 47  48 49 50  51 52 53
+    def __gen_square_list(self, index):
+        squares = [
+            [0, 1, 2, 9, 10, 11, 18, 19, 20],
+            [3, 4, 5, 12, 13, 14, 21, 22, 23],
+            [6, 7, 8, 15, 16, 17, 24, 25, 26],
+            [27, 28, 29, 36, 37, 38, 45, 46, 47],
+            [30, 31, 32, 39, 40, 41, 48, 49, 50],
+            [33, 34, 35, 42, 43, 44, 51, 52, 53],
+            [54, 55, 56, 63, 64, 65, 72, 73, 74],
+            [57, 58, 59, 66, 67, 68, 75, 76, 77],
+            [60, 61, 62, 69, 70, 71, 78, 79, 80]
+        ]
+        output = None
+        for s in squares:
+            if index in s:
+                output = s
+        return output
 
-        54 55 56  57 58 59  60 61 62
-        63 64 65  66 67 68  69 70 71
-        72 73 74  75 76 77  78 79 80
-        '''
-        if index in topLeft:
-            squareIndex = topLeft
-        elif index in topCenter:
-            squareIndex = topCenter
-        elif index in topRight:
-            squareIndex = topRight
-        elif index in midLeft:
-            squareIndex = midLeft
-        elif index in midCenter:
-            squareIndex = midCenter
-        elif index in midRight:
-            squareIndex = midRight
-        elif index in botLeft:
-            squareIndex = botLeft
-        elif index in botCenter:
-            squareIndex = botCenter
-        elif index in botRight:
-            squareIndex = botRight
-        for i in squareIndex:
-            square.append(self.gameList[i])
-        return square
+    def get_puzzle(self):
+        """
+        Get the current state of the puzzle all at once.
+
+        :return: A list of 81 Numbers representing the current game state.
+        """
+        return self.numbers
+
+    def check_puzzle(self):
+        """
+        Check the current game state to see if you won.
+
+        :return: A boolean representing whether or not the sudoku puzzle is complete and correct.
+        """
+        output = True
+        for r in range(9):
+            for c in range(9):
+                loc = r*9+c
+                self.numbers[loc].set_valid(self.__check_value(loc))
+                if not self.numbers[loc].get_valid():
+                    output = False
+        return output
+
+    def solve_puzzle(self):
+        """
+        Function to fill in all blank squares, regardless of the correctness of previously input data.
+
+        :return: Void
+        """
+        pass
+
+    def clear_progress(self):
+        """
+        Function to clear all progress on the Numbers that are editable.
+
+        :return: Void
+        """
+        pass
 
 
 
-s = Sudoku()
-s.setNumber(1,0)
-s.setNumber(2,1,2)
-print(s.getList(output='Matrix'))
-print(s.getList(output='Matrix', list='Edit'))
-print('\n\n')
-s.importList('puzzle.json')
-print(s.getList())
-print(s.getList(list='Edit'))
-s.setNumber(1,0)
-s.setNumber(4,5)
-print(s.getList(output='Matrix'))
-print('\n\nChecking index 10:')
-print('Row: ' + str(s.isolateRow(10)))
-print('Col: ' + str(s.isolateColumn(10)))
-print('Sqr: ' + str(s.isolateSquare(10)))
-print('\n\nChecking index 80:')
-print('Row: ' + str(s.isolateRow(80)))
-print('Col: ' + str(s.isolateColumn(80)))
-print('Sqr: ' + str(s.isolateSquare(80)))
-print('\n\n')
-print(s.checkSolution())
-print('\n\n')
-s.importList('solvedPuzzle.json')
-for line in s.getList('Matrix'):
-    print(line)
-print(s.checkSolution())
+
+
